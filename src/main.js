@@ -266,18 +266,26 @@ function fmtMB(bytes) {
 /* ---------- Run lifecycle (cancel support) ----------
  * The library has no built-in cancellation: removeBackground() cannot be
  * stopped mid-inference, and its compute stages block the main thread in
- * chunks. We approximate a real cancel with two mechanisms:
+ * chunks. We approximate a real cancel with three mechanisms:
  *   1. runId — a per-run token. Once cancelled, every callback and the final
  *      result of that run are ignored, so the UI is immediately free again.
  *   2. fetchArgs — passed straight through to fetch() for the model
  *      download, so the controller's signal HARD-ABORTS the ~95 MB download
- *      instantly (no waiting, no wasted bandwidth). */
+ *      instantly (no waiting, no wasted bandwidth).
+ *   3. abortEpoch — the library memoizes its init promise by
+ *      JSON.stringify(config), so a rejected (aborted) download would poison
+ *      every later run. Bumping __epoch inside fetchArgs gives the next run
+ *      a fresh memo key and a clean re-init. Only bumped after a hard abort,
+ *      so normal warm runs keep reusing the cached session. */
 let runId = 0
 let abortCtrl = null
+let abortEpoch = 0
+let computeStarted = false
 
 function startRun() {
   runId++
   abortCtrl = new AbortController()
+  computeStarted = false
   return runId
 }
 
@@ -287,10 +295,14 @@ function isStale(id) {
 
 function cancelRun() {
   runId++ // invalidate the in-flight run
-  if (abortCtrl) {
-    abortCtrl.abort() // hard-abort an in-flight model download
-    abortCtrl = null
+  // Hard-abort only while the model download is in flight — once inference
+  // has started there is nothing abortable, and skipping the abort keeps the
+  // library's memoized session healthy for the next (fast) run.
+  if (abortCtrl && !computeStarted) {
+    abortCtrl.abort()
+    abortEpoch++ // next run gets a fresh memo key (see comment above)
   }
+  abortCtrl = null
   show('upload')
   toast('Cancelled.')
 }
@@ -314,15 +326,17 @@ async function runRemoval(blob) {
     const cutout = await removeBackground(blob, {
       model: 'isnet_fp16',
       output: { format: 'image/png', quality: 1 },
-      fetchArgs: { signal: abortCtrl.signal },
+      fetchArgs: { signal: abortCtrl.signal, __epoch: abortEpoch },
       progress: (key, current, total) => {
         if (isStale(id)) return
         const sep = key.indexOf(':')
         const kind = sep === -1 ? key : key.slice(0, sep)
         const sub = sep === -1 ? '' : key.slice(sep + 1)
         if (kind === 'fetch') saw.fetch[sub] = { current, total }
-        else if (kind === 'compute') saw.compute[sub] = { current, total }
-        else return
+        else if (kind === 'compute') {
+          computeStarted = true
+          saw.compute[sub] = { current, total }
+        } else return
 
         // Fetch: sum bytes across all (parallel) resources.
         let bytesDone = 0

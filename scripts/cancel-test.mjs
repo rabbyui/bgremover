@@ -15,7 +15,10 @@ import { join } from 'node:path'
 const CHROME =
   process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const APP_URL = process.env.APP_URL || 'http://localhost:5173/'
-const USER_DIR = mkdtempSync(join(tmpdir(), 'cutout-cancel-'))
+// Reuse a profile dir across runs (PROFILE_DIR=...) to skip re-downloading
+// the ~95 MB model while debugging; otherwise a throwaway temp dir is used.
+const USER_DIR = process.env.PROFILE_DIR || mkdtempSync(join(tmpdir(), 'cutout-cancel-'))
+const OWN_DIR = !process.env.PROFILE_DIR
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
@@ -34,6 +37,29 @@ const check = (label, cond) => {
 try {
   const page = await browser.newPage()
   await page.setViewport({ width: 1280, height: 900 })
+
+  // Capture everything for failure diagnostics.
+  const consoleLog = []
+  page.on('console', (m) => consoleLog.push(`[console.${m.type()}] ${m.text()}`))
+  page.on('pageerror', (e) => consoleLog.push(`[pageerror] ${e.message}`))
+  page.on('requestfailed', (r) =>
+    consoleLog.push(`[requestfailed] ${r.url().slice(0, 120)} — ${r.failure()?.errorText}`)
+  )
+  const dumpDiagnostics = async (why) => {
+    console.log(`\n🔍 Diagnostics (${why}):`)
+    try {
+      const st = await page.evaluate(() => ({
+        view: document.querySelector('.view--active')?.id,
+        sub: document.getElementById('progressSub')?.textContent,
+        pct: document.getElementById('progressPct')?.textContent,
+        errTitle: document.getElementById('errorTitle')?.textContent,
+        errMsg: document.getElementById('errorMsg')?.textContent
+      }))
+      console.log('   page state:', JSON.stringify(st))
+    } catch {}
+    for (const line of consoleLog.slice(-15)) console.log('   ' + line)
+  }
+
   await page.goto(APP_URL, { waitUntil: 'networkidle2', timeout: 60000 })
 
   const uploadSample = () =>
@@ -96,10 +122,16 @@ try {
   // ---- Scenario 3: cancel during inference (model cached → fast) ----
   console.log('\n— Scenario 3: cancel during inference')
   await uploadSample()
-  await page.waitForFunction(
-    () => document.getElementById('progressSub').textContent.includes('Cutting out'),
-    { timeout: 120000 }
-  )
+  const reachedCompute = await page
+    .waitForFunction(
+      () => document.getElementById('progressSub').textContent.includes('Cutting out'),
+      { timeout: 120000 }
+    )
+    .catch(() => null)
+  if (!reachedCompute) {
+    await dumpDiagnostics('never reached compute stage in scenario 3')
+    throw new Error('Scenario 3: compute stage never started')
+  }
   await page.click('#cancelBtn')
   await new Promise((r) => setTimeout(r, 500))
   check('UI returns to upload view', (await activeView()) === 'upload')
@@ -116,7 +148,7 @@ try {
   failed++
 } finally {
   await browser.close()
-  rmSync(USER_DIR, { force: true, recursive: true })
+  if (OWN_DIR) rmSync(USER_DIR, { force: true, recursive: true })
   console.log(failed === 0 ? '\n🎉 ALL CANCEL TESTS PASSED' : `\n💥 ${failed} check(s) failed`)
   process.exit(failed === 0 ? 0 : 1)
 }

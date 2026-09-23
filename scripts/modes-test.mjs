@@ -53,12 +53,16 @@ try {
       const after = document.getElementById('imgAfter')
       const sw = slider.clientWidth
       const disp = (el) => getComputedStyle(el).display
+      const vis = (el) => getComputedStyle(el).visibility
       return {
+        sliderH: slider.clientHeight,
         clipPct: (clip.clientWidth / sw) * 100,
         clipVisible: disp(clip) !== 'none',
         handleVisible: disp(handle) !== 'none',
         beforeVisible: disp(before) !== 'none',
-        afterVisible: disp(after) !== 'none'
+        afterVisible: disp(after) !== 'none',
+        afterVis: vis(after),
+        beforeRectH: before.getBoundingClientRect().height
       }
     })
   }
@@ -77,6 +81,7 @@ try {
   expect('split: original visible', m.beforeVisible)
   expect('split: result visible', m.afterVisible)
   expect('split: handle visible', m.handleVisible)
+  expect('split: slider has height', m.sliderH > 100)
 
   // --- Result: only the cutout, no handle
   await clickMode('after')
@@ -86,13 +91,19 @@ try {
   expect('result: result visible', m.afterVisible)
   expect('result: handle hidden', !m.handleVisible)
 
-  // --- Original: the ORIGINAL image must fill the whole frame (the bug)
+  // --- Original: the ORIGINAL image must fill the whole frame.
+  // Regression guards:
+  //  (a) the result img is hidden via visibility (NOT display:none — that
+  //      collapsed the slider to 0 height since it's the only in-flow child)
+  //  (b) the slider actually has height and the original fills it
   await clickMode('before')
   m = await measure()
   console.log('original:', JSON.stringify(m))
   expect('original: original img visible', m.beforeVisible)
+  expect('original: slider keeps its height (>100px)', m.sliderH > 100)
+  expect('original: original fills the frame', m.beforeRectH > m.sliderH * 0.9)
   expect('original: clip ≈ 100%', Math.abs(m.clipPct - 100) < 1)
-  expect('original: result hidden', !m.afterVisible)
+  expect('original: result not rendered', m.afterVis === 'hidden')
   expect('original: handle hidden', !m.handleVisible)
 
   // --- Back to Split: position restored, everything visible again

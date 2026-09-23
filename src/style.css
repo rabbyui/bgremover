@@ -500,9 +500,13 @@ body {
 
 /* Original-only view: hide the result layer (direct child only — the
  * original img also carries .slider__img but lives inside the clip) and
- * the handle, then widen the original clip to cover everything. */
+ * the handle, then widen the original clip to cover everything.
+ * NOTE: visibility, NOT display — the result img is the only in-flow child
+ * giving .slider its height (the clip layer is position:absolute), so
+ * display:none would collapse the whole slider to 0 height. The 100%-wide
+ * clip (z-index 2) fully covers the still-laid-out result img. */
 .slider--before > .slider__img {
-  display: none;
+  visibility: hidden;
 }
 
 .slider--before .slider__handle {

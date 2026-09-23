@@ -78,6 +78,16 @@ try {
       return el ? el.id.replace('view-', '') : null
     })
 
+  // Direct DOM click — puppeteer's actionability checks lose races with the
+  // fast warm runs (the button can vanish between hit-test and click).
+  const clickCancel = () =>
+    page.evaluate(() => {
+      const b = document.getElementById('cancelBtn')
+      if (!b) return false
+      b.click()
+      return true
+    })
+
   // Count aborts of any fetch that carries our AbortController signal.
   await page.evaluate(() => {
     window.__aborted = 0
@@ -91,12 +101,30 @@ try {
   })
 
   // ---- Scenario 1: cancel during the cold model download -------------
+  /* Deterministic setup: clear the HTTP cache and throttle the network so
+   * the ~95 MB download is GUARANTEED to still be in flight when we click
+   * (even on a warm profile / fast connection). Unthrottled afterwards. */
   console.log('\n— Scenario 1: cancel during model download')
+  const cdp = await page.target().createCDPSession()
+  await cdp.send('Network.enable')
+  await cdp.send('Network.clearBrowserCache')
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: 50,
+    downloadThroughput: 2 * 1024 * 1024,
+    uploadThroughput: 2 * 1024 * 1024
+  })
   await uploadSample()
   await page.waitForSelector('#view-progress.view--active', { timeout: 10000 })
   await new Promise((r) => setTimeout(r, 1500)) // let the download start
-  await page.click('#cancelBtn')
+  if (!(await clickCancel())) throw new Error('cancel button not present in scenario 1')
   await new Promise((r) => setTimeout(r, 400))
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: -1
+  })
 
   check('UI returns to upload view immediately', (await activeView()) === 'upload')
   check(
@@ -120,20 +148,27 @@ try {
   )
 
   // ---- Scenario 3: cancel during inference (model cached → fast) ----
+  /* NOTE: we deliberately do NOT wait for the 'Cutting out' label here —
+   * single-threaded WASM inference starves rAF/timers, so label-based waits
+   * can time out even though processing is underway. A warm run is quick and
+   * may finish within a few seconds, so we click shortly after the progress
+   * view appears — that lands mid-decode/inference with the model cached. */
   console.log('\n— Scenario 3: cancel during inference')
   await uploadSample()
-  const reachedCompute = await page
-    .waitForFunction(
-      () => document.getElementById('progressSub').textContent.includes('Cutting out'),
-      { timeout: 120000 }
-    )
-    .catch(() => null)
-  if (!reachedCompute) {
-    await dumpDiagnostics('never reached compute stage in scenario 3')
-    throw new Error('Scenario 3: compute stage never started')
+  await page.waitForSelector('#view-progress.view--active', { timeout: 10000 })
+  await new Promise((r) => setTimeout(r, 400))
+  const clicked = await clickCancel()
+  if (!clicked) {
+    await dumpDiagnostics('cancel button already gone in scenario 3')
+    throw new Error('cancel button not present in scenario 3')
   }
-  await page.click('#cancelBtn')
   await new Promise((r) => setTimeout(r, 500))
+  const stateAtClick = await page.evaluate(() => ({
+    view: document.querySelector('.view--active')?.id,
+    sub: document.getElementById('progressSub')?.textContent,
+    pct: document.getElementById('progressPct')?.textContent
+  }))
+  console.log('   state right after click:', JSON.stringify(stateAtClick))
   check('UI returns to upload view', (await activeView()) === 'upload')
   await new Promise((r) => setTimeout(r, 4000))
   check('result view never appears after cancelling inference', (await activeView()) === 'upload')

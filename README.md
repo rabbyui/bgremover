@@ -24,7 +24,10 @@ End-to-end smoke test (builds must be served first, uses your installed
 Chrome headlessly — no accounts, no data sent anywhere):
 
 ```bash
-npm test
+npm test                                  # full pipeline + progress reporting
+node scripts/url-test.mjs                 # URL loading (CORS paths + errors)
+node scripts/modes-test.mjs               # Split / Result / Original modes
+node scripts/cancel-test.mjs              # Cancel during download & inference
 ```
 
 > The app must be served over **http(s) or localhost** — opening `index.html`

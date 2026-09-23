@@ -371,7 +371,7 @@ async function runRemoval(blob) {
 
     if (isStale(id)) return
     setProgress(STAGES.final, 1)
-    await displayResult(blob, cutout)
+    await displayResult(blob, cutout, id)
   } catch (err) {
     console.error(err)
     if (isStale(id)) return
@@ -391,13 +391,19 @@ async function runRemoval(blob) {
 }
 
 /* ---------- Result rendering ---------- */
-async function displayResult(originalBlob, cutoutBlob) {
+async function displayResult(originalBlob, cutoutBlob, id) {
   const dims = await new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
     img.onerror = reject
     img.src = URL.createObjectURL(cutoutBlob)
   }).catch(() => ({ w: 0, h: 0 }))
+
+  /* A click queued during a main-thread inference block can dispatch here,
+   * inside this await — after runRemoval's staleness check already passed.
+   * Without this guard the cancelled run would still flip to the result view
+   * and override the cancel. */
+  if (isStale(id)) return
 
   state.cutoutBlob = cutoutBlob
   state.width = dims.w

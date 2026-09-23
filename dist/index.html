@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#eef2f6" />
+    <meta name="description" content="Cutout — remove image backgrounds 100% free, right in your browser. Your photos never leave your device." />
+    <title>Cutout — Free Background Remover</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f7cff'/%3E%3Cpath d='M20 44V20h13a8 8 0 0 1 3.6 15.1L46 44h-8l-7.5-8H27v8z' fill='%23fff'/%3E%3C/svg%3E" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="preconnect" href="https://staticimgly.com" crossorigin />
+    <script type="module" crossorigin src="./assets/index-B1PR-00u.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CBN0iv0p.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="container topbar__inner">
+        <a class="brand" href="./" aria-label="Cutout home">
+          <span class="brand__mark">C</span>
+          <span class="brand__name">Cutout</span>
+        </a>
+        <div class="topbar__actions">
+          <button id="cameraBtn" class="btn btn--ghost btn--sm" type="button">📷 Camera</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="page-content" class="container">
+      <!-- ============ STEP 1: UPLOAD ============ -->
+      <section id="view-upload" class="view view--active">
+        <div class="hero">
+          <h1>Remove the background<br class="br-desktop" /> from any image</h1>
+          <p class="hero__sub">
+            100% automatically &middot; runs entirely in your browser &middot; your photos never leave your device
+          </p>
+        </div>
+
+        <div
+          id="dropzone"
+          class="dropzone"
+          role="button"
+          tabindex="0"
+          aria-label="Upload an image"
+        >
+          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          <div class="dropzone__icon">🖼️</div>
+          <div class="dropzone__title">Upload Image</div>
+          <div class="dropzone__hint">or drop a file &middot; paste an image &middot; 📷 take a photo</div>
+          <div class="dropzone__meta">PNG &middot; JPG &middot; WebP &middot; up to 22 MB &middot; nothing is uploaded</div>
+        </div>
+
+        <div id="urlRow" class="url-row">
+          <input id="urlInput" type="url" placeholder="Paste an image URL instead…" aria-label="Image URL" />
+          <button id="urlGoBtn" class="btn" type="button">Load</button>
+        </div>
+
+        <div class="gallery">
+          <div class="gallery__label">No image? Try one of these:</div>
+          <div class="gallery__grid" id="sampleGrid"></div>
+        </div>
+
+        <div class="notes">
+          <div class="note">
+            <strong>🔒 Private</strong>
+            <span>Processing happens on your device — images are never sent to a server.</span>
+          </div>
+          <div class="note">
+            <strong>⚡ First run downloads a ~95&nbsp;MB AI model</strong>
+            <span>It's cached afterward and works offline. Most images finish in seconds.</span>
+          </div>
+          <div class="note">
+            <strong>📶 Best on Wi‑Fi</strong>
+            <span>The first run is slower on mobile data — grab a coffee, it's a one‑time download.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ STEP 2: PROCESSING ============ -->
+      <section id="view-progress" class="view">
+        <div class="progress-wrap">
+          <div class="progress-thumb-wrap">
+            <img id="progressThumb" class="progress-thumb" alt="Your image" />
+          </div>
+          <h2 id="progressTitle">Getting things ready…</h2>
+          <p id="progressSub" class="progress-sub">Downloading the AI model (one time only)</p>
+          <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="progressFill" class="progress-bar__fill"></div>
+          </div>
+          <div id="progressPct" class="progress-pct">0%</div>
+          <button id="cancelBtn" class="btn btn--ghost" type="button">Cancel</button>
+        </div>
+      </section>
+
+      <!-- ============ STEP 3: RESULT ============ -->
+      <section id="view-result" class="view">
+        <div class="result-layout">
+          <div class="result-canvas">
+            <div id="slider" class="slider" aria-label="Before and after comparison">
+              <div id="checker" class="checker"></div>
+              <img id="imgAfter" class="slider__img" alt="Result with background removed" />
+              <div id="beforeClip" class="slider__before">
+                <img id="imgBefore" class="slider__img" alt="Original image" />
+              </div>
+              <div id="sliderHandle" class="slider__handle">
+                <div class="slider__knob">↔</div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="panel">
+            <div class="panel__group">
+              <div class="panel__label">Background</div>
+              <div class="swatches" id="swatches">
+                <button class="swatch swatch--checker is-active" data-color="transparent" type="button" aria-label="Transparent background"></button>
+                <button class="swatch" data-color="#ffffff" type="button" aria-label="White background" style="background:#ffffff"></button>
+                <button class="swatch" data-color="#0f1115" type="button" aria-label="Black background" style="background:#0f1115"></button>
+                <button class="swatch" data-color="#4f7cff" type="button" aria-label="Blue background" style="background:#4f7cff"></button>
+                <button class="swatch" data-color="#ff5a76" type="button" aria-label="Red background" style="background:#ff5a76"></button>
+                <button class="swatch" data-color="#00b67a" type="button" aria-label="Green background" style="background:#00b67a"></button>
+                <button class="swatch" data-color="#ffb020" type="button" aria-label="Yellow background" style="background:#ffb020"></button>
+                <button class="swatch swatch--custom" data-color="custom" type="button" title="Pick a custom color" aria-label="Custom background color">+</button>
+                <input id="customColor" type="color" value="#7c3aed" hidden />
+              </div>
+            </div>
+
+            <div class="panel__group">
+              <div class="panel__label">Compare</div>
+              <div class="seg" id="compareSeg" role="group" aria-label="Compare mode">
+                <button class="seg__btn is-active" data-mode="split" type="button">Split</button>
+                <button class="seg__btn" data-mode="after" type="button">Result</button>
+                <button class="seg__btn" data-mode="before" type="button">Original</button>
+              </div>
+            </div>
+
+            <div class="panel__actions">
+              <button id="downloadBtn" class="btn btn--primary btn--block" type="button">Download PNG</button>
+              <div class="action-row">
+                <button id="newImageBtn" class="btn btn--ghost" type="button">＋ New image</button>
+                <button id="shareBtn" class="btn btn--ghost" type="button">Share</button>
+              </div>
+            </div>
+
+            <div id="resultNote" class="result-note"></div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============ ERROR ============ -->
+      <section id="view-error" class="view">
+        <div class="error-wrap">
+          <div class="error-icon">😕</div>
+          <h2 id="errorTitle">Something went wrong</h2>
+          <p id="errorMsg" class="error-msg"></p>
+          <button id="errorBackBtn" class="btn btn--primary" type="button">Try another image</button>
+        </div>
+      </section>
+    </main>
+
+    <canvas id="workCanvas" hidden></canvas>
+    <div id="toast" class="toast" role="status"></div>
+
+    <footer class="footer">
+      <div class="container">
+        <span>Cutout — free background removal, on-device. © 2026 - Rabel Catayoc</span>
+      </div>
+    </footer>
+  </body>
+</html>

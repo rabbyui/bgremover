@@ -1,0 +1,21 @@
+{
+  "name": "bg-rm",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cutout — free, private, in-browser background remover",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "icons": "node scripts/gen-icons.mjs",
+    "test": "node scripts/smoke-test.mjs"
+  },
+  "dependencies": {
+    "@imgly/background-removal": "^1.5.5"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^21.11.0",
+    "vite": "^6.3.5"
+  }
+}

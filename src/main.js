@@ -49,7 +49,6 @@ const state = {
   mode: 'split', // 'split' | 'after' | 'before'
   downloadURL: null,
   downloadName: 'cutout.png',
-  cancelled: false,
   width: 0,
   height: 0
 }
@@ -242,7 +241,6 @@ function handleFile(file) {
     toast(`The maximum file size is ${MAX_MB} MB.`)
     return
   }
-  state.cancelled = false
   state.originalBlob = file
   runRemoval(file)
 }
@@ -265,15 +263,46 @@ function fmtMB(bytes) {
   return (bytes / 1048576).toFixed(1)
 }
 
-$('cancelBtn').addEventListener('click', () => {
-  state.cancelled = true
+/* ---------- Run lifecycle (cancel support) ----------
+ * The library has no built-in cancellation: removeBackground() cannot be
+ * stopped mid-inference, and its compute stages block the main thread in
+ * chunks. We approximate a real cancel with two mechanisms:
+ *   1. runId — a per-run token. Once cancelled, every callback and the final
+ *      result of that run are ignored, so the UI is immediately free again.
+ *   2. fetchArgs — passed straight through to fetch() for the model
+ *      download, so the controller's signal HARD-ABORTS the ~95 MB download
+ *      instantly (no waiting, no wasted bandwidth). */
+let runId = 0
+let abortCtrl = null
+
+function startRun() {
+  runId++
+  abortCtrl = new AbortController()
+  return runId
+}
+
+function isStale(id) {
+  return id !== runId
+}
+
+function cancelRun() {
+  runId++ // invalidate the in-flight run
+  if (abortCtrl) {
+    abortCtrl.abort() // hard-abort an in-flight model download
+    abortCtrl = null
+  }
   show('upload')
-})
+  toast('Cancelled.')
+}
+
+$('cancelBtn').addEventListener('click', cancelRun)
 
 /* ---------- The main pipeline ---------- */
 async function runRemoval(blob) {
+  const id = startRun()
   show('progress')
-  $('progressThumb').src = URL.createObjectURL(blob)
+  const thumbURL = URL.createObjectURL(blob)
+  $('progressThumb').src = thumbURL
   setProgress(STAGES.fetch, 0.02)
 
   /* The library reports progress as (key, current, total) with namespaced
@@ -285,8 +314,9 @@ async function runRemoval(blob) {
     const cutout = await removeBackground(blob, {
       model: 'isnet_fp16',
       output: { format: 'image/png', quality: 1 },
+      fetchArgs: { signal: abortCtrl.signal },
       progress: (key, current, total) => {
-        if (state.cancelled) return
+        if (isStale(id)) return
         const sep = key.indexOf(':')
         const kind = sep === -1 ? key : key.slice(0, sep)
         const sub = sep === -1 ? '' : key.slice(sep + 1)
@@ -325,12 +355,12 @@ async function runRemoval(blob) {
       }
     })
 
-    if (state.cancelled) return
+    if (isStale(id)) return
     setProgress(STAGES.final, 1)
     await displayResult(blob, cutout)
   } catch (err) {
     console.error(err)
-    if (state.cancelled) return
+    if (isStale(id)) return
     const msg = String((err && err.message) || err)
     showError(
       'Something went wrong',
@@ -339,8 +369,10 @@ async function runRemoval(blob) {
         : 'The image could not be processed. Try a different photo — clear photos of people, products or animals work best.'
     )
   } finally {
-    revoke($('progressThumb').src)
-    $('progressThumb').removeAttribute('src')
+    // Free this run's own thumbnail URL. Only reset the shared <img> if this
+    // run still owns the UI — a newer run may already be using the element.
+    revoke(thumbURL)
+    if (!isStale(id)) $('progressThumb').removeAttribute('src')
   }
 }
 

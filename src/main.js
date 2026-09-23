@@ -322,9 +322,14 @@ async function runRemoval(blob) {
    * "compute:decode|inference|mask|encode" (steps). We aggregate each
    * namespace into a real percentage instead of keying on exact names. */
   const saw = { fetch: {}, compute: {} }
-  try {
-    const cutout = await removeBackground(blob, {
+  const attempt = (device) =>
+    removeBackground(blob, {
       model: 'isnet_fp16',
+      // GPU (WebGPU) + worker proxying keeps inference OFF the main thread —
+      // without this, compute blocks the whole UI and Cancel can't respond.
+      // Browsers without WebGPU silently fall back to CPU/wasm (soft cancel).
+      device,
+      proxyToWorker: device === 'gpu',
       output: { format: 'image/png', quality: 1 },
       fetchArgs: { signal: abortCtrl.signal, __epoch: abortEpoch },
       progress: (key, current, total) => {
@@ -369,6 +374,20 @@ async function runRemoval(blob) {
       }
     })
 
+  /* If a WebGPU adapter exists but GPU inference itself fails (driver
+   * quirks, blocked shaders), retry once on CPU so the app self-heals. */
+  let cutout
+  try {
+    cutout = await attempt('gpu')
+  } catch (err) {
+    if (isStale(id)) throw err // user cancelled — outer catch swallows it
+    console.warn('GPU/WebGPU inference failed — retrying on CPU.', err)
+    for (const k of Object.keys(saw.fetch)) delete saw.fetch[k]
+    for (const k of Object.keys(saw.compute)) delete saw.compute[k]
+    cutout = await attempt('cpu')
+  }
+
+  try {
     if (isStale(id)) return
     setProgress(STAGES.final, 1)
     await displayResult(blob, cutout, id)

@@ -108,6 +108,11 @@ try {
   const cdp = await page.target().createCDPSession()
   await cdp.send('Network.enable')
   await cdp.send('Network.clearBrowserCache')
+  // The library/persisted caches can resolve the model instantly on a warm
+  // profile — clear Cache Storage too so the download is genuinely in flight.
+  await page.evaluate(() =>
+    caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
+  )
   await cdp.send('Network.emulateNetworkConditions', {
     offline: false,
     latency: 50,
@@ -116,7 +121,7 @@ try {
   })
   await uploadSample()
   await page.waitForSelector('#view-progress.view--active', { timeout: 10000 })
-  await new Promise((r) => setTimeout(r, 1500)) // let the download start
+  await new Promise((r) => setTimeout(r, 3000)) // download is throttled → still in flight
   if (!(await clickCancel())) throw new Error('cancel button not present in scenario 1')
   await new Promise((r) => setTimeout(r, 400))
   await cdp.send('Network.emulateNetworkConditions', {

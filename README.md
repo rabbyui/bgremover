@@ -46,6 +46,27 @@ npm test
 Images never leave the device. The only network traffic is the one-time
 download of the AI model from the imgly CDN and the app's own assets.
 
+## Deploy to GitHub Pages
+
+The site must serve the **built** `dist/` folder, not the repo root — raw
+`index.html` references `/src/main.js`, which only exists after a build (that's
+why the app works on `localhost` but not from a plain Pages deploy of the
+source).
+
+A workflow is included at `.github/workflows/deploy.yml` that builds and
+publishes `dist/` automatically on every push to `main`. One-time setup in
+your repo: **Settings → Pages → Source → “GitHub Actions”**. The site then
+live at `https://<user>.github.io/bgremover/`.
+
+All built asset paths are relative (`base: './'` in `vite.config.js`), so the
+app works from any subpath. `scripts/subpath-server.mjs` simulates the Pages
+environment locally:
+
+```bash
+npm run build && node scripts/subpath-server.mjs
+# → http://localhost:8788/bgremover/
+```
+
 ## Extras
 
 - `index.html?image=<encoded-url>` auto-processes a remote image (must allow CORS)
